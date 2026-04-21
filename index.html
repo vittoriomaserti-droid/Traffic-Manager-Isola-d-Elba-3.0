@@ -1,66 +1,178 @@
 <!DOCTYPE html>
-<html>
+<html lang="it">
 <head>
-    <title>Elba Traffic Live</title>
+    <meta charset="UTF-8">
+    <title>VTS TOSCANA PRO 3.0</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
-        #map { flex-grow: 1; }
-        #timetable { height: 200px; background: #222; color: #0f0; overflow-y: auto; padding: 10px; font-family: monospace; border-top: 2px solid #444; }
-        .header { background: #333; color: white; padding: 10px; text-align: center; }
+        body, html { margin:0; padding:0; height:100%; background:#000; color:#0f0; font-family:monospace; overflow:hidden; }
+        #home-screen { position:fixed; top:0; left:0; width:100%; height:100%; background:#000; z-index:10000; display:flex; flex-direction:column; align-items:center; justify-content:center; border:4px solid #0f0; box-sizing:border-box; padding:20px; }
+        /* Layout Radar Scuro */
+        #radar-screen { width:100vw; height:100vh; position:absolute; z-index:1; background: #000; }
+        #vts-panel { position:absolute; top:10px; right:10px; background:rgba(0,25,0,0.95); border:2px solid #0f0; padding:15px; z-index:999; width:380px; border-radius:10px; box-shadow: 0 0 15px #0f0; }
+        
+        /* TAGGING VISIBILE (Verde Neon su Nero) */
+        .ship-tag { 
+            background: #000 !important; 
+            color: #0f0 !important; 
+            border: 1px solid #0f0 !important; 
+            font-size: 12px !important; 
+            padding: 2px 6px !important; 
+            font-weight: bold !important; 
+            box-shadow: 0 0 5px #0f0;
+        }
+
+        button { background:#040; color:#fff; border:1px solid #0f0; cursor:pointer; padding:10px; width:100%; font-weight:bold; margin-top:5px; text-transform:uppercase; }
+        button:hover { background:#0f0; color:#000; }
+        .section { border:1px solid #060; padding:10px; margin-top:10px; border-radius:5px; background:rgba(0,0,0,0.6); }
+        input { background:#000; color:#0f0; border:1px solid #0f0; width:60px; text-align:center; font-size:22px; }
+        
+        /* Stile Icona Nave */
+        .ship-icon-svg { filter: drop-shadow(0 0 2px #0f0); }
     </style>
 </head>
 <body>
 
-<div class="header">
-    <h1>Traffic Manager - Elba Real-Time</h1>
-    <div id="clock">Simulatore Ore: 08:00</div>
+<div id="home-screen">
+    <h1 style="color:#ff0; font-size:40px;">VTS TOSCANA COMMAND</h1>
+    <div style="background:#111; padding:20px; border:1px solid #0f0; margin-bottom:20px; max-width:650px; text-align:left; font-size:14px; line-height:1.4;">
+        <b style="color:#0ff; font-size:18px;">OBIETTIVI DI MISSIONE:</b><br><br>
+        1. <b>TAGGING ATTIVO:</b> I nomi delle navi sono visualizzati in tempo reale.<br>
+        2. <b>PUNTEGGI:</b> +10 pt (entro 10 min), +5 pt (entro 15 min).<br>
+        3. <b>ROTTE REALI:</b> Montomoli su <b>Capraia</b>, Moby su <b>Bastia</b>, Rum su <b>Giglio</b>.<br>
+        4. <b>TELEMETRIA:</b> Clicca sulle navi per velocità e destinazione.<br>
+        5. <b>METEO:</b> Gestisci i blocchi per mare mosso.
+    </div>
+    <div style="margin-bottom:20px;">
+        ORA INIZIO OPERAZIONI: <input type="number" id="h" value="8"> : <input type="number" id="m" value="00">
+    </div>
+    <button onclick="bootRadar()" style="width:300px; padding:20px; font-size:22px;">ATTIVA RADAR</button>
 </div>
 
-<div id="map"></div>
+<div id="radar-screen"></div>
 
-<div id="timetable">
-    <h3>--- TABELLONE PARTENZE/ARRIVI ---</h3>
-    <div id="log">In attesa del prossimo traghetto...</div>
+<div id="vts-panel">
+    <div style="display:flex; justify-content:space-between; font-size:24px; font-weight:bold; color:#ff0; margin-bottom:10px;">
+        <div>PUNTI: <span id="punti">0</span></div>
+        <div id="clock" style="color:#0ff;">--:--</div>
+    </div>
+    
+    <div class="section">
+        <h3>CONSOLLE NAVI IN PORTO</h3>
+        <div id="lista-navi" style="max-height:300px; overflow-y:auto;"></div>
+    </div>
+
+    <div class="section">
+        <h3>TABELLONE PARTENZE</h3>
+        <div id="tab-orari" style="height:120px; overflow-y:auto; font-size:12px; color:#0f0;"></div>
+    </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    // 1. Inizializzazione Mappa su Portoferraio
-    const map = L.map('map').setView([42.81, 10.31], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    let map, flotta = [], punti = 0, gameMinutes = 480, isPaused = true;
+    let audioCtx;
 
-    // 2. Dati Orari (Esempio)
-    const traghetti = [
-        { nave: "Moby Baby Two", ora: "08:15", da: "Piombino", a: "Portoferraio", auto: 150 },
-        { nave: "Toremar Oglasa", ora: "09:00", da: "Piombino", a: "Portoferraio", auto: 200 },
-        { nave: "Blu Navy Acciarello", ora: "09:30", da: "Piombino", a: "Portoferraio", auto: 180 }
+    const PORTS = {
+        PIOMBINO: [42.92, 10.54], PORTOFERRAIO: [42.81, 10.32], RIO_MARINA: [42.81, 10.42],
+        LIVORNO: [43.55, 10.30], BASTIA: [42.73, 9.45], CAPRAIA: [43.05, 9.84],
+        SAN_STEFANO: [42.43, 11.11], GIGLIO: [42.35, 10.92]
+    };
+
+    const schedule = [
+        { t: 300, id: 'montomoli', label: "05:00 - MONTOMOLI (Liv -> Capraia)" },
+        { t: 480, id: 'moby', label: "08:00 - MOBY (Liv -> Bastia)" },
+        { t: 540, id: 'montomoli', label: "09:00 - MONTOMOLI (Capraia -> Liv)" },
+        { t: 720, id: 'moby', label: "12:00 - MOBY (Bas -> Liv)" },
+        { t: 840, id: 'rum', label: "14:00 - G. RUM (S.Stefano -> Gig)" },
+        { t: 1020, id: 'moby', label: "17:00 - MOBY (Liv -> Bastia)" }
     ];
 
-    let oraSimulata = 8;
-    let minutiSimulati = 0;
-
-    // 3. Funzione Loop Temporale
-    function aggiornaSimulazione() {
-        minutiSimulati++;
-        if(minutiSimulati >= 60) {
-            minutiSimulati = 0;
-            oraSimulata++;
-        }
-
-        const orarioStringa = `${oraSimulata.toString().padStart(2, '0')}:${minutiSimulati.toString().padStart(2, '0')}`;
-        document.getElementById('clock').innerText = "Simulatore Ore: " + orarioStringa;
-
-        // Controllo se un traghetto deve partire
-        traghetti.forEach(t => {
-            if(t.ora === orarioStringa) {
-                document.getElementById('log').innerHTML += `<br>[${orarioStringa}] ARRIVO: ${t.nave} da ${t.da}. Scarico di ${t.auto} veicoli in corso...`;
-                // Qui aggiungeremo il movimento sulla mappa!
-            }
-        });
+    function bootRadar() {
+        gameMinutes = (parseInt(document.getElementById('h').value) * 60) + parseInt(document.getElementById('m').value);
+        document.getElementById('home-screen').style.display = 'none';
+        isPaused = false;
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        initMap();
     }
 
-    setInterval(aggiornaSimulazione, 1000); // 1 secondo reale = 1 minuto nel gioco
+    function initMap() {
+        // Mappa scura senza filtri per massima compatibilità
+        map = L.map('radar-screen', { zoomControl: false }).setView([42.9, 10.3], 9);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: 'VTS Command'
+        }).addTo(map);
+
+        const naviData = [
+            { id: 'montomoli', name: 'S. MONTOMOLI', speed: 0.0015, cruise: 14, startPort: 'LIVORNO' },
+            { id: 'moby', name: 'MOBY/CORSICA', speed: 0.0020, cruise: 22, startPort: 'LIVORNO' },
+            { id: 'rum', name: 'GIUSEPPE RUM', speed: 0.0011, cruise: 12, startPort: 'SAN_STEFANO' },
+            { id: 'ogla', name: 'OGLASA', speed: 0.0014, cruise: 15, startPort: 'PIOMBINO' },
+            { id: 'jet', name: 'SCHIOPPARELLO JET', speed: 0.0035, cruise: 32, startPort: 'PIOMBINO' }
+        ];
+
+        naviData.forEach(s => {
+            let n = {...s, pos: [...PORTS[s.startPort]], status: 'READY', currentPort: s.startPort, targetName: '-'};
+            n.marker = L.marker(n.pos, { 
+                icon: L.divIcon({ 
+                    className:'ship-icon-svg', 
+                    html:`<svg width="24" height="12"><path d="M1,6 L23,6 M1,6 L6,1 L20,1 L23,6 L20,11 L6,11 Z" fill="white" stroke="#0f0" stroke-width="1"/></svg>`, 
+                    iconSize:[24,12]
+                }) 
+            }).addTo(map);
+            
+            // TAGGING FISSO (TOOLTIP)
+            n.marker.bindTooltip(n.name, { permanent: true, direction: 'right', className: 'ship-tag', offset: [12, 0] });
+            
+            n.marker.on('click', () => alert(`--- DATA REPORT: ${n.name} ---\nVelocità: ${n.cruise} nodi\nStatus: ${n.status === 'MOVING' ? 'In rotta per '+n.targetName : 'In Porto'}`));
+            flotta.push(n);
+        });
+        
+        // Forza il refresh della mappa
+        setTimeout(() => map.invalidateSize(), 400);
+    }
+
+    window.inviaNave = (id, dest) => {
+        let n = flotta.find(x => x.id === id);
+        const s = schedule.find(x => x.id === id && x.t >= gameMinutes - 20);
+        if(s) {
+            let diff = Math.abs(gameMinutes - s.t);
+            if(diff <= 10) punti += 10; else if(diff <= 15) punti += 5;
+            document.getElementById('punti').innerText = punti;
+        }
+        n.route = [PORTS[dest]]; n.targetName = dest; n.status = 'MOVING';
+        
+        // Beep
+        let o = audioCtx.createOscillator(); let g = audioCtx.createGain();
+        o.connect(g); g.connect(audioCtx.destination); o.frequency.value = 900;
+        g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.3);
+        o.start(); o.stop(audioCtx.currentTime + 0.3);
+    };
+
+    setInterval(() => {
+        if(isPaused) return;
+        gameMinutes++;
+        let h = Math.floor(gameMinutes/60)%24, m = gameMinutes%60;
+        document.getElementById('clock').innerText = (h<10?'0'+h:h)+':'+(m<10?'0'+m:m);
+        
+        document.getElementById('tab-orari').innerHTML = schedule.filter(x => x.t >= gameMinutes).sort((a,b)=>a.t-b.t).slice(0,10).map(x => `<div>${x.label}</div>`).join('');
+        
+        document.getElementById('lista-navi').innerHTML = flotta.filter(n => n.status === 'READY').map(n => `
+            <div style="background:rgba(0,50,0,0.3); border:1px solid #0f0; padding:8px; margin-bottom:8px; border-left:4px solid yellow;">
+                <b>${n.name}</b><br>
+                ${Object.keys(PORTS).filter(p => p !== n.currentPort).slice(0,2).map(p => `<button onclick="inviaNave('${n.id}','${p}')">SALPA PER ${p}</button>`).join('')}
+            </div>`).join('');
+    }, 1000);
+
+    setInterval(() => {
+        if(isPaused) return;
+        flotta.forEach(n => {
+            if (n.status !== 'MOVING') return;
+            let t = n.route[0], dLat = t[0]-n.pos[0], dLng = t[1]-n.pos[1], dist = Math.sqrt(dLat*dLat+dLng*dLng);
+            if (dist < 0.01) { n.status='READY'; n.currentPort=n.targetName; n.pos=[...t]; }
+            else { n.pos[0]+=(dLat/dist)*(n.speed/5); n.pos[1]+=(dLng/dist)*(n.speed/5); n.marker.setLatLng(n.pos); }
+        });
+    }, 50);
 </script>
 </body>
 </html>
