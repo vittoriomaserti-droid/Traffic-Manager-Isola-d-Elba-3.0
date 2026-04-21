@@ -1,58 +1,66 @@
 <!DOCTYPE html>
-<html lang="it">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Traffic Manager - Elba</title>
+    <title>Elba Traffic Live</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; align-items: center; color: white; font-family: sans-serif; }
-        canvas { border: 4px solid #444; background: #0077be; cursor: crosshair; margin-top: 20px; }
-        .ui { padding: 10px; text-align: center; }
+        body { margin: 0; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
+        #map { flex-grow: 1; }
+        #timetable { height: 200px; background: #222; color: #0f0; overflow-y: auto; padding: 10px; font-family: monospace; border-top: 2px solid #444; }
+        .header { background: #333; color: white; padding: 10px; text-align: center; }
     </style>
 </head>
 <body>
-    <div class="ui">
-        <h1>Traffic Manager: Isola d'Elba</h1>
-        <p>Usa le frecce sulla tastiera per muovere il traghetto/auto!</p>
-    </div>
-    <canvas id="gameCanvas" width="800" height="500"></canvas>
 
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+<div class="header">
+    <h1>Traffic Manager - Elba Real-Time</h1>
+    <div id="clock">Simulatore Ore: 08:00</div>
+</div>
 
-        let player = { x: 400, y: 250, size: 20, speed: 5 };
+<div id="map"></div>
 
-        function draw() {
-            // Sfondo Mare
-            ctx.fillStyle = "#0077be";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+<div id="timetable">
+    <h3>--- TABELLONE PARTENZE/ARRIVI ---</h3>
+    <div id="log">In attesa del prossimo traghetto...</div>
+</div>
 
-            // Disegno terraferma stilizzata (Elba)
-            ctx.fillStyle = "#2d5a27";
-            ctx.beginPath();
-            ctx.moveTo(150, 250); ctx.lineTo(300, 150); ctx.lineTo(550, 180);
-            ctx.lineTo(650, 300); ctx.lineTo(500, 400); ctx.lineTo(250, 350);
-            ctx.closePath();
-            ctx.fill();
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // 1. Inizializzazione Mappa su Portoferraio
+    const map = L.map('map').setView([42.81, 10.31], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-            // Disegno "Giocatore" (il tuo veicolo)
-            ctx.fillStyle = "red";
-            ctx.fillRect(player.x, player.y, player.size, player.size);
+    // 2. Dati Orari (Esempio)
+    const traghetti = [
+        { nave: "Moby Baby Two", ora: "08:15", da: "Piombino", a: "Portoferraio", auto: 150 },
+        { nave: "Toremar Oglasa", ora: "09:00", da: "Piombino", a: "Portoferraio", auto: 200 },
+        { nave: "Blu Navy Acciarello", ora: "09:30", da: "Piombino", a: "Portoferraio", auto: 180 }
+    ];
+
+    let oraSimulata = 8;
+    let minutiSimulati = 0;
+
+    // 3. Funzione Loop Temporale
+    function aggiornaSimulazione() {
+        minutiSimulati++;
+        if(minutiSimulati >= 60) {
+            minutiSimulati = 0;
+            oraSimulata++;
         }
 
-        // Movimento
-        window.addEventListener('keydown', (e) => {
-            if(e.key === "ArrowUp") player.y -= player.speed;
-            if(e.key === "ArrowDown") player.y += player.speed;
-            if(e.key === "ArrowLeft") player.x -= player.speed;
-            if(e.key === "ArrowRight") player.x += player.speed;
+        const orarioStringa = `${oraSimulata.toString().padStart(2, '0')}:${minutiSimulati.toString().padStart(2, '0')}`;
+        document.getElementById('clock').innerText = "Simulatore Ore: " + orarioStringa;
+
+        // Controllo se un traghetto deve partire
+        traghetti.forEach(t => {
+            if(t.ora === orarioStringa) {
+                document.getElementById('log').innerHTML += `<br>[${orarioStringa}] ARRIVO: ${t.nave} da ${t.da}. Scarico di ${t.auto} veicoli in corso...`;
+                // Qui aggiungeremo il movimento sulla mappa!
+            }
         });
+    }
 
-        function loop() {
-            draw();
-            requestAnimationFrame(loop);
-        }
-        loop();
-    </script>
+    setInterval(aggiornaSimulazione, 1000); // 1 secondo reale = 1 minuto nel gioco
+</script>
 </body>
 </html>
