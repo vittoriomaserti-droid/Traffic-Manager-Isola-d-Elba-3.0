@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Traffic Manager - Elba</title>
+    <style>
+        body { margin: 0; background: #1a1a1a; display: flex; flex-direction: column; align-items: center; color: white; font-family: sans-serif; }
+        canvas { border: 4px solid #444; background: #0077be; cursor: crosshair; margin-top: 20px; }
+        .ui { padding: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="ui">
+        <h1>Traffic Manager: Isola d'Elba</h1>
+        <p>Usa le frecce sulla tastiera per muovere il traghetto/auto!</p>
+    </div>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let player = { x: 400, y: 250, size: 20, speed: 5 };
+
+        function draw() {
+            // Sfondo Mare
+            ctx.fillStyle = "#0077be";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Disegno terraferma stilizzata (Elba)
+            ctx.fillStyle = "#2d5a27";
+            ctx.beginPath();
+            ctx.moveTo(150, 250); ctx.lineTo(300, 150); ctx.lineTo(550, 180);
+            ctx.lineTo(650, 300); ctx.lineTo(500, 400); ctx.lineTo(250, 350);
+            ctx.closePath();
+            ctx.fill();
+
+            // Disegno "Giocatore" (il tuo veicolo)
+            ctx.fillStyle = "red";
+            ctx.fillRect(player.x, player.y, player.size, player.size);
+        }
+
+        // Movimento
+        window.addEventListener('keydown', (e) => {
+            if(e.key === "ArrowUp") player.y -= player.speed;
+            if(e.key === "ArrowDown") player.y += player.speed;
+            if(e.key === "ArrowLeft") player.x -= player.speed;
+            if(e.key === "ArrowRight") player.x += player.speed;
+        });
+
+        function loop() {
+            draw();
+            requestAnimationFrame(loop);
+        }
+        loop();
+    </script>
+</body>
+</html>
